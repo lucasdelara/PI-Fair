@@ -407,7 +407,7 @@ def train_model(x,y,reg=0,model=None):
             return _logistic_loss(w,X,y)
 
         w = minimize(fun = _fun,
-            x0 = np.random.rand(X.shape[1],),
+            x0 = 2*np.random.rand(X.shape[1],)-1,
             args = (X,y),
             method = 'L-BFGS-B',
             jac=True,
@@ -427,7 +427,7 @@ def train_model(x,y,reg=0,model=None):
             args = (X,y,model),
             method = 'L-BFGS-B',
             jac=True,
-            options = {"maxiter":100000, 'disp':True}
+            options = {"maxiter":1e7, 'disp':True}
             )
 
     return w.x
