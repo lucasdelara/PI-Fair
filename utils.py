@@ -283,7 +283,7 @@ def disparate_impact(y,S):
 
 def _log_logistic(X):
 
-    """ This function is used from scikit-learn source code. Source link below """
+    """ Source code: https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/utils/extmath.py """
 
     """Compute the log of the logistic function, ``log(1 / (1 + e ** -x))``.
     This implementation is numerically stable because it splits positive and
@@ -300,16 +300,8 @@ def _log_logistic(X):
     -------
     out: array, shape (M, N)
         Log of the logistic function evaluated at every point in x
-    Notes
-    -----
-    Source code at:
-    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/utils/extmath.py
-    -----
-
-    See the blog post describing this implementation:
-    http://fa.bianp.net/blog/2013/numerical-optimizers-for-logistic-regression/
     """
-
+    
     if X.ndim > 1: raise Exception("Array of samples cannot be more than 1-D!")
     out = np.empty_like(X) # same dimensions and data types
 
@@ -408,8 +400,6 @@ def train_model(x,y,reg=0,model=None):
 
     """
     X = np.concatenate((np.ones((x.shape[0],1)),x),axis=1) # add an intercept
-
-    max_iter = 100000 # maximum number of iterations for the minimization algorithm
     
     if reg == 0: # train a standard predictor
     
@@ -421,7 +411,7 @@ def train_model(x,y,reg=0,model=None):
             args = (X,y),
             method = 'L-BFGS-B',
             jac=True,
-            options = {"maxiter":max_iter, 'disp':True},
+            options = {"maxiter":1e7, 'disp':True},
             )
     
     else:
@@ -431,21 +421,14 @@ def train_model(x,y,reg=0,model=None):
             ll,lg = _logistic_loss(w,X,y)
             cfl, cfg = _counterfactual_loss(w,X,model)
             return (ll+reg*cfl,lg+reg*cfg)
-
+         
         w = minimize(fun = _fun,
-            x0 = np.random.rand(X.shape[1],),
+            x0 = 2*np.random.rand(X.shape[1],)-1,
             args = (X,y,model),
             method = 'L-BFGS-B',
             jac=True,
             options = {"maxiter":100000, 'disp':True}
             )
-        
-    try:
-        assert(w.success == True)
-    except:
-        print("Optimization problem did not converge.. Check the solution returned by the optimizer.")
-        print("Returned solution is:")
-        print(w)
 
     return w.x
 
