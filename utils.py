@@ -5,10 +5,12 @@ import os
 import sklearn as sk
 from scipy.optimize import minimize
 from scipy.special import expit
+from scipy import stats
+import matplotlib.pyplot as plt
 
 # METHOD TO IMPORT DATA
 
-def read_and_treat_adult_data(DirectoryName,SensitiveVarName='Sex'):
+def read_and_treat_adult_data(DirectoryName,SensitiveVarName='Sex',display=False):
     """
     Read and treat the adult census data as in [Besse et al., The American Statistician, 2021]
     -> DirectoryName is the directory in which the files "adult.data.csv" and "adult.test.csv" are located
@@ -100,13 +102,150 @@ def read_and_treat_adult_data(DirectoryName,SensitiveVarName='Sex'):
 
     S_train=X_train_NoScaling[:,X_col_names.index(SensitiveVarName)].ravel()
     S_test=X_test_NoScaling[:,X_col_names.index(SensitiveVarName)].ravel()
+    
+    if display:
+        print("S_train.shape:",S_train.shape)
+        print("X_train.shape:",X_train.shape)
+        print("y_train.shape:",y_train.shape)
+        print("S_test.shape:",S_test.shape)
+        print("X_test.shape:",X_test.shape)
+        print("y_test.shape:",y_test.shape)
 
-    print("S_train.shape:",S_train.shape)
-    print("X_train.shape:",X_train.shape)
-    print("y_train.shape:",y_train.shape)
-    print("S_test.shape:",S_test.shape)
-    print("X_test.shape:",X_test.shape)
-    print("y_test.shape:",y_test.shape)
+    return [X_train, X_test, y_train, y_test, S_train, S_test,X_col_names]
+
+def read_and_treat_law_data(DirectoryName,SensitiveVarName='race',display=False):
+    """
+    -> DirectoryName is the directory in which the file "law_data.csv" is located
+    ->  SensitiveVarName is the string representing the sensitive variable
+    -> Return [X_train, X_test, y_train, y_test, S_train, S_test]
+    """
+
+    #read and merge original data
+    data = pd.read_csv(os.path.join(DirectoryName, "law_data.csv"))
+
+    #keep only black and white people
+    data = data.loc[:, ['race','LSAT','UGPA','ZFYA']]
+    data = data.loc[data['race'].isin(['White','Black'])]
+    data.loc[data['race'] == "White", "race"] = 1
+    data.loc[data['race'] == "Black", "race"] = 0
+    
+    #extract the target and the features
+    y=data['ZFYA'].values.reshape(-1,1)
+    data_wo_target=data.drop(columns=['ZFYA'])
+    X_col_names=list(data_wo_target.columns)
+    X=data_wo_target.values
+
+    #... split the learning and test samples
+    from sklearn.model_selection import train_test_split
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33)
+    
+    #isolate the protected attribute
+    S_train=X_train[:,X_col_names.index(SensitiveVarName)].ravel()
+    S_test=X_test[:,X_col_names.index(SensitiveVarName)].ravel()
+    
+    if display:
+        print("S_train.shape:",S_train.shape)
+        print("X_train.shape:",X_train.shape)
+        print("y_train.shape:",y_train.shape)
+        print("S_test.shape:",S_test.shape)
+        print("X_test.shape:",X_test.shape)
+        print("y_test.shape:",y_test.shape)
+
+    return [X_train, X_test, y_train, y_test, S_train, S_test,X_col_names]
+
+def read_and_treat_crime_data(DirectoryName,SensitiveVarName='sensitive', display=False):
+    """
+    -> DirectoryName is the directory in which the file "communities.data" is located
+    ->  SensitiveVarName is the string representing the sensitive variable
+    -> Return [X_train, X_test, y_train, y_test, S_train, S_test]
+    """
+
+    #read and merge original data
+    attrib = pd.read_csv(os.path.join(DirectoryName, 'attributes.csv'), delim_whitespace = True)
+    data = pd.read_csv(os.path.join(DirectoryName, "communities.data"), names = attrib['attributes'])
+    
+    #remove non-predictive features
+    data = data.drop(columns=['state','county','community','communityname','fold'], axis=1)
+    
+    #handle missing values
+    data = data.replace('?', np.nan)
+    from sklearn.impute import SimpleImputer
+    imputer = SimpleImputer(missing_values = np.nan, strategy = 'mean')#, axis = 0
+    imputer.fit(data[['OtherPerCap']])
+    data[['OtherPerCap']] = imputer.transform(data[['OtherPerCap']])
+    data = data.dropna(axis=1)
+    #data = data[data['OtherPerCap'].notna()]
+    
+    #create the sensitive variable
+    data.loc[data['racepctblack'] >= 0.5, "sensitive"] = 0
+    data.loc[data['racepctblack'] < 0.5, "sensitive"] = 1
+    #drop other variables
+    data = data.drop(columns=['racepctblack','racePctAsian','racePctAsian','racePctHisp'], axis=1)
+    
+    #extract the target and the features
+    y=data['ViolentCrimesPerPop'].values.reshape(-1,1)
+    data_wo_target=data.drop(columns=['ViolentCrimesPerPop'])
+    X_col_names=list(data_wo_target.columns)
+    X=data_wo_target.values
+
+    #... split the learning and test samples
+    from sklearn.model_selection import train_test_split
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33)
+    
+    #isolate the protected attribute
+    S_train=X_train[:,X_col_names.index(SensitiveVarName)].ravel()
+    S_test=X_test[:,X_col_names.index(SensitiveVarName)].ravel()
+    
+    if display:
+        print("S_train.shape:",S_train.shape)
+        print("X_train.shape:",X_train.shape)
+        print("y_train.shape:",y_train.shape)
+        print("S_test.shape:",S_test.shape)
+        print("X_test.shape:",X_test.shape)
+        print("y_test.shape:",y_test.shape)
+
+    return [X_train, X_test, y_train, y_test, S_train, S_test,X_col_names]
+
+def read_and_treat_compas_data(DirectoryName,SensitiveVarName='race',display=False):
+    """
+    -> DirectoryName is the directory in which the file "compas-scores-two-years.csv" is located
+    ->  SensitiveVarName is the string representing the sensitive variable
+    -> Return [X_train, X_test, y_train, y_test, S_train, S_test]
+    """
+
+    #read and merge original data
+    data = pd.read_csv(os.path.join(DirectoryName, "compas-scores-two-years.csv"))
+    data = data.loc[:, ['race','age','juv_misd_count','juv_other_count','priors_count', 'event','decile_score','two_year_recid']]
+
+    #keep only black and white people
+    data = data.loc[data['race'].isin(['African-American','Caucasian'])]
+    data.loc[data['race'] == "African-American", "race"] = 0
+    data.loc[data['race'] == "Caucasian", "race"] = 1
+    
+    #extract the target and the features
+    y=data['two_year_recid'].values.reshape(-1,1)
+    data_wo_target=data.drop(columns=['two_year_recid'])
+    X_col_names=list(data_wo_target.columns)
+    X=data_wo_target.values
+
+    #... split the learning and test samples
+    from sklearn.model_selection import train_test_split
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33)
+    
+    #isolate the protected attribute
+    S_train=X_train[:,X_col_names.index(SensitiveVarName)].ravel()
+    S_test=X_test[:,X_col_names.index(SensitiveVarName)].ravel()
+    
+    if display:
+        print("S_train.shape:",S_train.shape)
+        print("X_train.shape:",X_train.shape)
+        print("y_train.shape:",y_train.shape)
+        print("S_test.shape:",S_test.shape)
+        print("X_test.shape:",X_test.shape)
+        print("y_test.shape:",y_test.shape)
 
     return [X_train, X_test, y_train, y_test, S_train, S_test,X_col_names]
 
@@ -155,7 +294,8 @@ def learn_cf(X,S):
     model['group_indexes'] = group_indexes
     n_groups=len(group_indexes)
     model['n_groups'] = n_groups
-    ot_plans = [[None]*n_groups]*n_groups # stores the n_groups*n_groups transport plans
+    #ot_plans = [[None]*n_groups]*n_groups # stores the n_groups*n_groups transport plans
+    ot_plans = [[None for _ in range(n_groups)] for _ in range(n_groups)]
     group_sizes = []
     for s in range(n_groups):
         ns = len(group_indexes[s])
@@ -278,6 +418,128 @@ def disparate_impact(y,S):
         return (pi_0*p_1)/(pi_1*p_0)
     else:
         return 1
+    
+def statistical_parity(y,S):
+    """Computes the correlation between a sample of decisions and a protected attribute.
+
+    Inputs
+    ----------
+    y: ndarray, shape (n_samples,)
+       Array of decisions (0 or 1).
+
+    S : ndarray, shape (n_samples,)
+        Array of protected attributes (0 or 1).
+    """
+    return np.abs(np.cov(y,S)[0][1])
+
+def KS(y,S):
+    y0 = y[np.where(S==0)[0]]
+    y1 = y[np.where(S==1)[0]]
+    res = stats.ks_2samp(y0,y1)
+    return res[0]
+
+def PG(y,S):
+    """Computes the parity gap of a sample of decisions in a binary classification setting with two protected groups.
+
+    Inputs
+    ----------
+    y: ndarray, shape (n_samples,)
+       Array of decisions (0 or 1).
+
+    S : ndarray, shape (n_samples,)
+        Array of protected attributes (0 or 1).
+    """
+    n=1.*y.shape[0]
+        
+    pi_1=np.mean(S) #estimated P(S=1)
+    pi_0=1-pi_1 #estimated P(S=0)
+    p_1=np.mean(S*y)   #estimated P(g(X)=1, S=1)
+    p_0=np.mean((1-S)*y) #estimated P(g(X)=1, S=0)
+    return np.abs(p_1/pi_1-p_0/pi_0)
+
+## OTHER EVALUATION METRICS
+
+def MSE(y_pred,y):
+    return np.mean(np.power(y_pred-y,2))
+
+def LinearSCM_CFL(w,S,X,shift=np.array([8.109451  , 0.36601582])):
+    """Computes the causal counterfactual fairness rate of a sample of predictions.
+    WARNING: Works only for two groups.
+
+    Inputs
+    ----------
+    w : weight of the predictor
+
+    S : array of protected attributes
+        
+    X : ndarray of features
+
+    epsilon : float
+              Tolerance for the gap in disparate treatment.
+
+    shift : array of counterfactual shift
+    """
+
+    Xcf = np.concatenate(((1-S)[:,None],X[:,1:] - (2*S - 1)[:,None]*shift),axis=1)
+    yy = np.dot(X - Xcf,w[1:])
+    
+    return np.sum(np.power(yy,2))
+
+def LinearSCM_CFR(w,S,X,epsilon,shift=np.array([8.109451  , 0.36601582])):
+    """Computes the causal counterfactual fairness rate of a sample of predictions.
+    WARNING: Works only for two groups.
+
+    Inputs
+    ----------
+    w : weight of the predictor
+
+    S : array of protected attributes
+        
+    X : ndarray of features
+
+    epsilon : float
+              Tolerance for the gap in disparate treatment.
+
+    shift : array of counterfactual shift
+    """
+
+    Xcf = np.concatenate(((1-S)[:,None],X[:,1:] - (2*S - 1)[:,None]*shift),axis=1)
+    yy = np.dot(X - Xcf,w[1:])
+    
+    return np.mean(np.abs(yy) <= epsilon)
+
+## PlOTTING RESULTS
+
+def plot_and_show(param_scale,metric,title,save,legend=False):
+    means = np.mean(metric,axis=0)
+    stds = 0.5*np.std(metric,axis=0)
+    #Unaltered
+    plt.plot(param_scale,[means[0]]*len(param_scale), color='green', label='U')
+    plt.fill_between(param_scale,[means[0]-stds[0]]*len(param_scale),
+                                 [means[0]+stds[0]]*len(param_scale), color='green', alpha=0.2)
+    #Trade-off
+    plt.plot(param_scale,means[1:len(param_scale)+1],
+             color='blue',linestyle='solid', marker='o', label='$\Pi$-Fair($\lambda$)')
+    plt.fill_between(param_scale,means[1:len(param_scale)+1]-stds[1:len(param_scale)+1],
+                                 means[1:len(param_scale)+1]+stds[1:len(param_scale)+1],
+                                 color='blue',alpha=0.4)
+    #Constant
+    plt.plot(param_scale,[means[-2]]*len(param_scale), color='red', label='Const')
+    plt.fill_between(param_scale,[means[-2]-stds[-2]]*len(param_scale),
+                                 [means[-2]+stds[-2]]*len(param_scale), color='red', alpha=0.2)
+    #Group fair
+    plt.plot(param_scale,[means[-1]]*len(param_scale), color='purple', label='Z')
+    plt.fill_between(param_scale,[means[-1]-stds[-1]]*len(param_scale),
+                                 [means[-1]+stds[-1]]*len(param_scale), color='purple', alpha=0.2)
+
+    plt.ylabel(title)
+    plt.xlabel('$\lambda$ (log10)')
+    if legend:
+        plt.legend()
+    fig = plt.gcf()
+    plt.show()
+
+    fig.savefig(save)
 
 ## LOSS FUNCTIONS
 
@@ -330,6 +592,23 @@ def _logistic_loss(w, X, y):
     
     return (-np.sum(y*_log_logistic(np.dot(X,w))+(1-y)*_log_logistic(-np.dot(X,w))),(X.T).dot(expit(np.dot(X,w))-y))
 
+def _l2_loss(w,X,y):
+    """Computes the l2 loss and its gradient.
+
+    Inputs
+    ----------
+    w : ndarray, shape (n_features,) or (n_features + 1,)
+        Coefficient vector.
+
+    X : {array-like, sparse matrix}, shape (n_samples, n_features)
+        Training data.
+
+    y : ndarray, shape (n_samples,)
+        Array of labels.
+
+    """
+    return (np.sum(np.power(np.dot(X,w)-y,2)),2*np.dot(X.T,np.dot(X,w)-y))
+
 def _counterfactual_loss(w, X, model):
     """Computes the counterfactual loss and its gradient.
 
@@ -373,7 +652,7 @@ def _counterfactual_loss(w, X, model):
 
 ## METHOD TO TRAIN A COUNTERFACTUALLY FAIR CLASSIFIER
 
-def train_model(x,y,reg=0,model=None):
+def train_classif(x,y,reg=0,model=None):
 
     """
 
@@ -432,9 +711,75 @@ def train_model(x,y,reg=0,model=None):
 
     return w.x
 
+def train_regr(x,y,reg=0,model=None):
+
+    """
+
+    Function that trains the model subject to the Pi-counterfactual fairness penalization.
+    If no constraints are given, then simply trains an unaltered classifier.
+
+    ----
+
+    Inputs:
+
+    x : ndarray, shape (n_samples, n_features)
+        Training data.
+    y : ndarray, shape (n_samples,)
+        Array of labels.
+    reg : float
+          Weight of the regularization.
+
+    ----
+
+    Outputs:
+
+    w: ndarray, shape (n_features+1,)
+       Learnt weight vector for the predictor
+
+    """
+    X = np.concatenate((np.ones((x.shape[0],1)),x),axis=1) # add an intercept
+    
+    if reg == 0: # train a standard predictor
+    
+        def _fun(w,X,y):
+            return _l2_loss(w,X,y)
+
+        w = minimize(fun = _fun,
+            x0 = 2*np.random.rand(X.shape[1],)-1,
+            args = (X,y),
+            method = 'L-BFGS-B',
+            jac=True,
+            options = {"maxiter":1e7, 'disp':True},
+            )
+    
+    else:
+        
+            
+        def _fun(w,X,y,model):
+            ll,lg = _l2_loss(w,X,y)
+            cfl, cfg = _counterfactual_loss(w,X,model)
+            return (ll+reg*cfl,lg+reg*cfg)
+         
+        w = minimize(fun = _fun,
+            x0 = 2*np.random.rand(X.shape[1],)-1,
+            args = (X,y,model),
+            method = 'L-BFGS-B',
+            jac=True,
+            options = {"maxiter":1e7, 'disp':True}
+            )
+
+    return w.x
+
 ## METHOD TO MAKE BINARY PREDICTIONS
 
 def classifier(x,w):
     X = np.concatenate((np.ones((x.shape[0],1)),x),axis=1)
     p_hat = expit(np.dot(X,w))
     return np.round(p_hat)
+
+def regression(x,w,bounds=(-np.inf,np.inf)):
+    X = np.concatenate((np.ones((x.shape[0],1)),x),axis=1)
+    y_pred = np.dot(X,w)
+    y_pred[np.where(y_pred<bounds[0])[0]]=bounds[0]
+    y_pred[np.where(y_pred>bounds[1])[0]]=bounds[1]
+    return y_pred
